@@ -6,7 +6,7 @@ import {
     Memory,
     Plugin,
     State,
-    ModelClass
+    ModelClass,
 } from "@elizaos/core";
 import { generateImage } from "@elizaos/core";
 import fs from "fs";
@@ -86,7 +86,9 @@ const imageGeneration: Action = {
         const falApiKeyOk = !!runtime.getSetting("FAL_API_KEY");
         const openAiApiKeyOk = !!runtime.getSetting("OPENAI_API_KEY");
         const veniceApiKeyOk = !!runtime.getSetting("VENICE_API_KEY");
-        const livepeerGatewayUrlOk = !!runtime.getSetting("LIVEPEER_GATEWAY_URL");
+        const livepeerGatewayUrlOk = !!runtime.getSetting(
+            "LIVEPEER_GATEWAY_URL"
+        );
 
         return (
             anthropicApiKeyOk ||
@@ -124,7 +126,7 @@ const imageGeneration: Action = {
 
         const CONTENT = message.content.text;
         const IMAGE_SYSTEM_PROMPT = `You are an expert in writing prompts for AI art generation. You excel at creating detailed and creative visual descriptions. Incorporating specific elements naturally. Always aim for clear, descriptive language that generates a creative picture. Your output should only contain the description of the image contents, but NOT an instruction like "create an image that..."`;
-        const STYLE = "futuristic with vibrant colors";
+        const STYLE = "natural, watercolor painting";
 
         const IMAGE_PROMPT_INPUT = `You are tasked with generating an image prompt based on a content and a specified style.
             Your goal is to create a detailed and vivid image prompt that captures the essence of the content while incorporating an appropriate subject based on your analysis of the content.\n\nYou will be given the following inputs:\n<content>\n${CONTENT}\n</content>\n\n<style>\n${STYLE}\n</style>\n\nA good image prompt consists of the following elements:\n\n
@@ -189,15 +191,57 @@ Ensure that your prompt is detailed, vivid, and incorporates all the elements me
                 prompt: imagePrompt,
                 width: options.width || imageSettings.width || 1024,
                 height: options.height || imageSettings.height || 1024,
-                ...(options.count != null || imageSettings.count != null ? { count: options.count || imageSettings.count || 1 } : {}),
-                ...(options.negativePrompt != null || imageSettings.negativePrompt != null ? { negativePrompt: options.negativePrompt || imageSettings.negativePrompt } : {}),
-                ...(options.numIterations != null || imageSettings.numIterations != null ? { numIterations: options.numIterations || imageSettings.numIterations } : {}),
-                ...(options.guidanceScale != null || imageSettings.guidanceScale != null ? { guidanceScale: options.guidanceScale || imageSettings.guidanceScale } : {}),
-                ...(options.seed != null || imageSettings.seed != null ? { seed: options.seed || imageSettings.seed } : {}),
-                ...(options.modelId != null || imageSettings.modelId != null ? { modelId: options.modelId || imageSettings.modelId } : {}),
-                ...(options.jobId != null || imageSettings.jobId != null ? { jobId: options.jobId || imageSettings.jobId } : {}),
-                ...(options.stylePreset != null || imageSettings.stylePreset != null ? { stylePreset: options.stylePreset || imageSettings.stylePreset } : {}),
-                ...(options.hideWatermark != null || imageSettings.hideWatermark != null ? { hideWatermark: options.hideWatermark || imageSettings.hideWatermark } : {}),
+                ...(options.count != null || imageSettings.count != null
+                    ? { count: options.count || imageSettings.count || 1 }
+                    : {}),
+                ...(options.negativePrompt != null ||
+                imageSettings.negativePrompt != null
+                    ? {
+                          negativePrompt:
+                              options.negativePrompt ||
+                              imageSettings.negativePrompt,
+                      }
+                    : {}),
+                ...(options.numIterations != null ||
+                imageSettings.numIterations != null
+                    ? {
+                          numIterations:
+                              options.numIterations ||
+                              imageSettings.numIterations,
+                      }
+                    : {}),
+                ...(options.guidanceScale != null ||
+                imageSettings.guidanceScale != null
+                    ? {
+                          guidanceScale:
+                              options.guidanceScale ||
+                              imageSettings.guidanceScale,
+                      }
+                    : {}),
+                ...(options.seed != null || imageSettings.seed != null
+                    ? { seed: options.seed || imageSettings.seed }
+                    : {}),
+                ...(options.modelId != null || imageSettings.modelId != null
+                    ? { modelId: options.modelId || imageSettings.modelId }
+                    : {}),
+                ...(options.jobId != null || imageSettings.jobId != null
+                    ? { jobId: options.jobId || imageSettings.jobId }
+                    : {}),
+                ...(options.stylePreset != null ||
+                imageSettings.stylePreset != null
+                    ? {
+                          stylePreset:
+                              options.stylePreset || imageSettings.stylePreset,
+                      }
+                    : {}),
+                ...(options.hideWatermark != null ||
+                imageSettings.hideWatermark != null
+                    ? {
+                          hideWatermark:
+                              options.hideWatermark ||
+                              imageSettings.hideWatermark,
+                      }
+                    : {}),
             },
             runtime
         );
