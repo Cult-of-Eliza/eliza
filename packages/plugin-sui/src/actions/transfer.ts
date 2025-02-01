@@ -5,6 +5,7 @@ import {
     IAgentRuntime,
     Memory,
     ModelClass,
+    ServiceType,
     State,
     composeContext,
     elizaLogger,
@@ -14,13 +15,12 @@ import {
 import { z } from "zod";
 
 import { SuiClient, getFullnodeUrl } from "@mysten/sui/client";
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
 import { SUI_DECIMALS } from "@mysten/sui/utils";
 
 import { walletProvider } from "../providers/wallet";
-
-type SuiNetwork = "mainnet" | "testnet" | "devnet" | "localnet";
+import { parseAccount, SuiNetwork } from "../utils";
+import { SuiService } from "../services/sui";
 
 export interface TransferContent extends Content {
     recipient: string;
@@ -139,8 +139,7 @@ export default {
         }
 
         try {
-            const privateKey = runtime.getSetting("SUI_PRIVATE_KEY");
-            const suiAccount = Ed25519Keypair.deriveKeypair(privateKey);
+            const suiAccount = parseAccount(runtime);
             const network = runtime.getSetting("SUI_NETWORK");
             const suiClient = new SuiClient({
                 url: getFullnodeUrl(network as SuiNetwork),
@@ -164,8 +163,14 @@ export default {
             console.log("Transfer successful:", executedTransaction.digest);
 
             if (callback) {
+                const suiService = runtime.getService<SuiService>(
+                    ServiceType.TRANSCRIPTION
+                );
+                const txLink = await suiService.getTransactionLink(
+                    executedTransaction.digest
+                );
                 callback({
-                    text: `Successfully transferred ${transferContent.amount} SUI to ${transferContent.recipient}, Transaction: ${executedTransaction.digest}`,
+                    text: `Successfully transferred ${transferContent.amount} SUI to ${transferContent.recipient}, Transaction: ${txLink}`,
                     content: {
                         success: true,
                         hash: executedTransaction.digest,

@@ -1,10 +1,11 @@
 import {
-    ActionExample,
-    HandlerCallback,
-    IAgentRuntime,
-    Memory,
+    type ActionExample,
+    type HandlerCallback,
+    elizaLogger,
+    type IAgentRuntime,
+    type Memory,
     ModelClass,
-    State,
+    type State,
     type Action,
     composeContext,
     generateObject,
@@ -20,21 +21,46 @@ import {
     ONE_YOCTO_NEAR,
 } from "@ref-finance/ref-sdk";
 import { walletProvider } from "../providers/wallet";
-import { KeyPairString } from "near-api-js/lib/utils";
+import type { KeyPairString } from "near-api-js/lib/utils";
+
+// Add interface for swap response
+interface SwapResponse {
+    inputTokenId: string;
+    outputTokenId: string;
+    amount: string;
+}
+
+// Add type for swap result
+interface SwapTransaction {
+    receiverId: string;
+    functionCalls: Array<{
+        methodName: string;
+        args: Record<string, unknown>;
+        gas: string;
+        amount: string;
+    }>;
+}
 
 async function checkStorageBalance(
-    account: any,
+    account: unknown,
     contractId: string
 ): Promise<boolean> {
     try {
-        const balance = await account.viewFunction({
+        const balance = await (account as {
+            viewFunction: (args: {
+                contractId: string;
+                methodName: string;
+                args: { account_id: string };
+            }) => Promise<{ total: string } | null>;
+            accountId: string;
+        }).viewFunction({
             contractId,
             methodName: "storage_balance_of",
-            args: { account_id: account.accountId },
+            args: { account_id: (account as { accountId: string }).accountId },
         });
         return balance !== null && balance.total !== "0";
     } catch (error) {
-        console.log(`Error checking storage balance: ${error}`);
+        elizaLogger.log(`Error checking storage balance: ${error}`);
         return false;
     }
 }
@@ -47,14 +73,14 @@ async function swapToken(
     slippageTolerance: number = Number(
         runtime.getSetting("SLIPPAGE_TOLERANCE")
     ) || 0.01
-): Promise<any> {
+): Promise<unknown> {
     try {
         // Get token metadata
         const tokenIn = await ftGetTokenMetadata(inputTokenId);
         const tokenOut = await ftGetTokenMetadata(outputTokenId);
         const networkId = runtime.getSetting("NEAR_NETWORK") || "testnet";
         const nodeUrl =
-            runtime.getSetting("RPC_URL") || "https://rpc.testnet.near.org";
+            runtime.getSetting("NEAR_RPC_URL") || "https://rpc.testnet.near.org";
 
         // Get all pools for estimation
         // ratedPools, unRatedPools,
@@ -142,7 +168,7 @@ async function swapToken(
 
         return transactions;
     } catch (error) {
-        console.error("Error in swapToken:", error);
+        elizaLogger.error("Error in swapToken:", error);
         throw error;
     }
 }
@@ -186,8 +212,8 @@ export const executeSwap: Action = {
         "TRADE_TOKENS_NEAR",
         "EXCHANGE_TOKENS_NEAR",
     ],
-    validate: async (runtime: IAgentRuntime, message: Memory) => {
-        console.log("Message:", message);
+    validate: async (_runtime: IAgentRuntime, message: Memory) => {
+        elizaLogger.log("Message:", message);
         return true;
     },
     description: "Perform a token swap using Ref Finance.",
@@ -201,17 +227,25 @@ export const executeSwap: Action = {
         // Initialize Ref SDK with testnet environment
         init_env(runtime.getSetting("NEAR_NETWORK") || "testnet");
         // Compose state
+
+        // if (!state) {
+        //     state = (await runtime.composeState(message)) as State;
+        // } else {
+        //     state = await runtime.updateRecentMessageState(state);
+        // }
+        let currentState: State;
+        
         if (!state) {
-            state = (await runtime.composeState(message)) as State;
+            currentState = (await runtime.composeState(message)) as State;
         } else {
-            state = await runtime.updateRecentMessageState(state);
+            currentState = await runtime.updateRecentMessageState(state);
         }
 
-        const walletInfo = await walletProvider.get(runtime, message, state);
-        state.walletInfo = walletInfo;
+        const walletInfo = await walletProvider.get(runtime, message, currentState);
+        currentState.walletInfo = walletInfo;
 
         const swapContext = composeContext({
-            state,
+            state: currentState,
             template: swapTemplate,
         });
 
@@ -219,16 +253,21 @@ export const executeSwap: Action = {
             runtime,
             context: swapContext,
             modelClass: ModelClass.LARGE,
-        });
+        }) as unknown as SwapResponse;
 
-        console.log("Response:", response);
+        // Type guard for response validation
+        function isSwapResponse(obj: unknown): obj is SwapResponse {
+            return (
+                typeof obj === 'object' &&
+                obj !== null &&
+                'inputTokenId' in obj &&
+                'outputTokenId' in obj &&
+                'amount' in obj
+            );
+        }
 
-        if (
-            !response.inputTokenId ||
-            !response.outputTokenId ||
-            !response.amount
-        ) {
-            console.log("Missing required parameters, skipping swap");
+        if (!isSwapResponse(response)) {
+            elizaLogger.log("Missing required parameters, skipping swap");
             const responseMsg = {
                 text: "I need the input token ID, output token ID, and amount to perform the swap",
             };
@@ -256,18 +295,18 @@ export const executeSwap: Action = {
                 networkId: runtime.getSetting("NEAR_NETWORK") || "testnet",
                 keyStore,
                 nodeUrl:
-                    runtime.getSetting("RPC_URL") ||
+                    runtime.getSetting("NEAR_RPC_URL") ||
                     "https://rpc.testnet.near.org",
             });
 
             // Execute swap
-            const swapResult = await swapToken(
+            const swapResult = (await swapToken(
                 runtime,
                 response.inputTokenId,
                 response.outputTokenId,
                 response.amount,
                 Number(runtime.getSetting("SLIPPAGE_TOLERANCE")) || 0.01
-            );
+            )) as SwapTransaction[];
 
             // Sign and send transactions
             const account = await nearConnection.account(accountId);
@@ -279,7 +318,7 @@ export const executeSwap: Action = {
                         contractId: tx.receiverId,
                         methodName: functionCall.methodName,
                         args: functionCall.args,
-                        gas: functionCall.gas,
+                        gas: BigInt(functionCall.gas),  // Convert string to BigInt
                         attachedDeposit: BigInt(
                             functionCall.amount === ONE_YOCTO_NEAR
                                 ? "1"
@@ -290,7 +329,7 @@ export const executeSwap: Action = {
                 }
             }
 
-            console.log("Swap completed successfully!");
+            elizaLogger.log("Swap completed successfully!");
             const txHashes = results.map((r) => r.transaction.hash).join(", ");
 
             const responseMsg = {
@@ -300,7 +339,7 @@ export const executeSwap: Action = {
             callback?.(responseMsg);
             return true;
         } catch (error) {
-            console.error("Error during token swap:", error);
+            elizaLogger.error("Error during token swap:", error);
             const responseMsg = {
                 text: `Error during swap: ${error instanceof Error ? error.message : String(error)}`,
             };
